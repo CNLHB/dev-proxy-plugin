@@ -154,8 +154,6 @@ function createProxyConfig (options) {
               }
               const decompressed = decompress()
               let html = decompressed.toString('utf-8')
-              console.log('[origin-html]', html)
-
               if (developmentAgentOccupancy) {
                 html = html.replace(
                   developmentAgentOccupancy,
