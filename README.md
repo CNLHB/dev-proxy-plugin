@@ -1,8 +1,5 @@
 # vite-plugin-dev-proxy
 
-[![npm](https://img.shields.io/npm/dt/vite-plugin-dev-proxy?style=for-the-badge)](https://www.npmjs.com/package/vite-plugin-dev-proxy) ![GitHub Repo stars](https://img.shields.io/github/stars/CNLHB/vite-plugin-dev-proxy?label=GitHub%20Stars&style=for-the-badge) [![GitHub](https://img.shields.io/github/license/CNLHB/vite-plugin-dev-proxy?color=blue&style=for-the-badge)](https://github.com/CNLHB/vite-plugin-dev-proxy/blob/master/LICENSE)
-![GitHub last commit](https://img.shields.io/github/last-commit/CNLHB/vite-plugin-dev-proxy?style=for-the-badge) [![Issues](https://img.shields.io/github/issues/CNLHB/vite-plugin-dev-proxy?style=for-the-badge)](https://github.com/CNLHB/vite-plugin-dev-proxy/issues)
-
 A Vite plugin for development environment proxy that automatically proxies remote server requests and handles HTML responses.
 
 ## Features
@@ -36,15 +33,15 @@ pnpm add vite-plugin-dev-proxy --save-dev
 
 ```js
 // vite.config.js
-import { defineConfig } from 'vite';
-import viteDevProxy from 'vite-plugin-dev-proxy';
+import { defineConfig } from "vite";
+import viteDevProxy from "vite-plugin-dev-proxy";
 
 export default defineConfig({
   plugins: [
     viteDevProxy({
-      appHost: 'example.com',
-    })
-  ]
+      appHost: "example.com",
+    }),
+  ],
 });
 ```
 
@@ -52,21 +49,21 @@ export default defineConfig({
 
 ```js
 // vite.config.js
-import { defineConfig } from 'vite';
-import viteDevProxy from 'vite-plugin-dev-proxy';
+import { defineConfig } from "vite";
+import viteDevProxy from "vite-plugin-dev-proxy";
 
 export default defineConfig({
   plugins: [
     viteDevProxy({
-      appHost: 'example.com',
+      appHost: "example.com",
       https: true,
-      staticPrefix: '/dev/static',
-      bypassPrefixes: ['/static'],
-      scriptCssPrefix: '/static/global',
-      entry: '/src/main.js',
+      staticPrefix: "/dev/static",
+      bypassPrefixes: ["/static"],
+      scriptCssPrefix: "/static/global",
+      entry: "/src/main.js",
       debug: true,
-    })
-  ]
+    }),
+  ],
 });
 ```
 
@@ -77,16 +74,16 @@ export default defineConfig({
 export default defineConfig({
   plugins: [
     viteDevProxy({
-      appHost: 'example.com',
-    })
+      appHost: "example.com",
+    }),
   ],
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:8080'
-      }
-    }
-  }
+      "/api": {
+        target: "http://localhost:8080",
+      },
+    },
+  },
 });
 ```
 
@@ -96,17 +93,17 @@ export default defineConfig({
 
 #### Options
 
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `appHost` | `string` | - | ✅ | Target server address |
-| `https` | `boolean` | `true` | - | Whether to use HTTPS for the target server |
-| `staticPrefix` | `string` | `''` | - | Static resource prefix, used to build local entry path |
-| `bypassPrefixes` | `string[]` | `['/static']` | - | List of prefixes to bypass proxy, requests matching these prefixes will access remote resources |
-| `scriptCssPrefix` | `string` | `''` | - | Script/CSS prefix, used to precisely match remote scripts and stylesheets to remove |
-| `entry` | `string` | `'/src/main.js'` | - | Local development entry file path |
-| `isLib` | `boolean` | `false` | - | Whether in component library mode, returns local HTML file when true |
-| `localIndexHtml` | `string` | `'index.html'` | - | Local HTML file path (only used when isLib=true) |
-| `debug` | `boolean` | `false` | - | Whether to enable debug logging |
+| Parameter         | Type       | Default          | Required | Description                                                                                     |
+| ----------------- | ---------- | ---------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `appHost`         | `string`   | -                | ✅       | Target server address                                                                           |
+| `https`           | `boolean`  | `true`           | -        | Whether to use HTTPS for the target server                                                      |
+| `staticPrefix`    | `string`   | `''`             | -        | Static resource prefix, used to build local entry path                                          |
+| `bypassPrefixes`  | `string[]` | `['/static']`    | -        | List of prefixes to bypass proxy, requests matching these prefixes will access remote resources |
+| `scriptCssPrefix` | `string`   | `''`             | -        | Script/CSS prefix, used to precisely match remote scripts and stylesheets to remove             |
+| `entry`           | `string`   | `'/src/main.js'` | -        | Local development entry file path                                                               |
+| `isLib`           | `boolean`  | `false`          | -        | Whether in component library mode, returns local HTML file when true                            |
+| `localIndexHtml`  | `string`   | `'index.html'`   | -        | Local HTML file path (only used when isLib=true)                                                |
+| `debug`           | `boolean`  | `false`          | -        | Whether to enable debug logging                                                                 |
 
 ## How It Works
 
@@ -117,6 +114,7 @@ The plugin injects `server.proxy` configuration through Vite's `config` hook, pr
 ### 2. HTML Processing
 
 When detecting a browser page navigation request and the response is HTML:
+
 - Removes remote `type="module" crossorigin` script tags
 - Removes remote `crossorigin` stylesheet link tags
 - Inserts local development script entry
@@ -136,12 +134,13 @@ Enable the `debug` option to view detailed logs:
 
 ```js
 viteDevProxy({
-  appHost: 'example.com',
+  appHost: "example.com",
   debug: true,
 });
 ```
 
 Log output example:
+
 ```
 vite-plugin-dev-proxy: staticPrefix /dev/static
 vite-plugin-dev-proxy: scriptCssPrefix /static/global
@@ -156,16 +155,16 @@ Redirect handled: https://example.com/login -> http://localhost:3003/login (3ms)
 This plugin is written in TypeScript and provides full type definitions. You can import types for better development experience:
 
 ```typescript
-import viteDevProxy, { ProxyOptions } from 'vite-plugin-dev-proxy';
+import viteDevProxy, { ProxyOptions } from "vite-plugin-dev-proxy";
 
 const config: ProxyOptions = {
-  appHost: 'example.com',
+  appHost: "example.com",
   https: true,
-  debug: true
+  debug: true,
 };
 
 export default defineConfig({
-  plugins: [viteDevProxy(config)]
+  plugins: [viteDevProxy(config)],
 });
 ```
 

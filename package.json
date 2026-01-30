@@ -1,5 +1,5 @@
 {
-	"name": "vite-plugin-dev-proxy",
+	"name": "@xysfe/vite-plugin-dev-proxy",
 	"version": "1.0.0",
 	"description": "A Vite plugin for development environment proxy that automatically proxies remote server requests and handles HTML responses",
 	"files": [
@@ -29,7 +29,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/CNLHB/vite-plugin-dev-proxy.git"
+		"url": ""
 	},
 	"keywords": [
 		"vite",
@@ -41,12 +41,8 @@
 		"cookie",
 		"redirect"
 	],
-	"author": "aiwa <1348844909@qq.com> (https://cnlhb.github.io/blog/)",
+	"author": "aiwa",
 	"license": "MIT",
-	"bugs": {
-		"url": "https://github.com/CNLHB/vite-plugin-dev-proxy/issues"
-	},
-	"homepage": "https://github.com/CNLHB/vite-plugin-dev-proxy#readme",
 	"devDependencies": {
 		"@types/node": "^20.11.5",
 		"typescript": "^5.3.3",

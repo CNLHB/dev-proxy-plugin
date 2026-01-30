@@ -10,7 +10,9 @@ interface ProxyOptions {
   localIndexHtml?: string;
   staticPrefix?: string;
   bypassPrefixes?: string[];
-  scriptCssPrefix?: string;
+  // scriptCssPrefix?: string;
+  clearScriptCssPrefixes?: string | string[] | Function | RegExp;
+  developmentAgentOccupancy?: string;
   entry?: string;
   debug?: boolean;
 }
@@ -53,7 +55,9 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
     localIndexHtml = "index.html",
     staticPrefix = "",
     bypassPrefixes = ["/static"],
-    scriptCssPrefix = "",
+    // scriptCssPrefix = "",
+    developmentAgentOccupancy = "",
+    clearScriptCssPrefixes = "",
     entry = "/src/main.js",
     debug = false,
   } = options;
@@ -72,22 +76,24 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
     ? staticPrefix.slice(0, -1)
     : staticPrefix;
   log("vite-plugin-dev-proxy: staticPrefix", normalizedStaticPrefix);
-  log("vite-plugin-dev-proxy: scriptCssPrefix", scriptCssPrefix);
+  // log("vite-plugin-dev-proxy: scriptCssPrefix", scriptCssPrefix);
   const fullEntry = normalizedStaticPrefix + entry;
 
-  const scriptRegex = scriptCssPrefix
-    ? new RegExp(
-        `<script[^>]*type="module"[^>]*crossorigin[^>]*src="${scriptCssPrefix}[^"]+"[^>]*><\\/script>`,
-        "g",
-      )
-    : /<script[^>]*type="module"[^>]*crossorigin[^>]*src="[^"]+"[^>]*><\/script>/g;
+  // const scriptRegex = scriptCssPrefix
+  //   ? new RegExp(
+  //       `<script[^>]*type="module"[^>]*crossorigin[^>]*src="${scriptCssPrefix}[^"]+"[^>]*><\\/script>`,
+  //       "g",
+  //     )
+  //   : /<script[^>]*type="module"[^>]*crossorigin[^>]*src="[^"]+"[^>]*><\/script>/g;
 
-  const linkRegex = scriptCssPrefix
-    ? new RegExp(
-        `<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="${scriptCssPrefix}[^"]+"[^>]*>`,
-        "g",
-      )
-    : /<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="[^"]+"[^>]*>/g;
+  // const linkRegex = scriptCssPrefix
+  //   ? new RegExp(
+  //       `<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="${scriptCssPrefix}[^"]+"[^>]*>`,
+  //       "g",
+  //     )
+  //   : /<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="[^"]+"[^>]*>/g;
+
+  const scriptLinkRegex = /<(?:script[^>]*>.*?<\/script>|link[^>]*>)/g;
 
   const assetRegex =
     /\.(js|mjs|ts|tsx|jsx|css|scss|sass|less|vue|json|woff2?|ttf|eot|ico|png|jpe?g|gif|svg|webp)(\?.*)?$/i;
@@ -103,10 +109,10 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
       cookieDomainRewrite: { "*": "localhost" },
       selfHandleResponse: true,
       configure: (proxy, options) => {
-        const rewriteCookies = (headers) => {
+        const rewriteCookies = (headers: any) => {
           const setCookie = headers["set-cookie"];
           if (setCookie) {
-            headers["set-cookie"] = setCookie.map((cookie) => {
+            headers["set-cookie"] = setCookie.map((cookie: any) => {
               let rewrittenCookie = cookie
                 .replace(/;\s*secure\s*(;|$)/gi, "$1")
                 .replace(/;\s*domain\s*=[^;]+(;|$)/gi, "$1")
@@ -195,9 +201,14 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
                 "content-encoding"
               ] as string | undefined;
               const chunks: Buffer[] = [];
-              proxyRes.on("data", (chunk: Buffer) => {
-                chunks.push(chunk);
-              });
+              proxyRes.on(
+                "data",
+                (chunk: Buffer<ArrayBufferLike> | undefined) => {
+                  if (chunk) {
+                    chunks.push(chunk);
+                  }
+                },
+              );
               proxyRes.on("end", () => {
                 try {
                   let buffer: Buffer = Buffer.concat(chunks);
@@ -213,12 +224,53 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
                   };
                   const decompressed: Buffer = decompress();
                   let html: string = decompressed.toString("utf-8");
-                  html = html.replace(scriptRegex, "");
-                  html = html.replace(
-                    /<!--\sVite development mode proxy occupancy\s-->/g,
-                    `<script crossorigin type="module" src="${fullEntry}"></script>`,
-                  );
-                  html = html.replace(linkRegex, "");
+                  // html = html.replace(scriptRegex, "");
+                  // html = html.replace(linkRegex, "");
+                  // <div id="app"></div>
+                  if (developmentAgentOccupancy) {
+                    html = html.replace(
+                      developmentAgentOccupancy,
+                      `<script crossorigin type="module" src="${fullEntry}"></script>`,
+                    );
+                  } else {
+                    html = html.replace(
+                      /<div[^>]*id=["']app["'][^>]*><\/div>/g,
+                      (match) =>
+                        `${match}<script crossorigin type="module" src="${fullEntry}"><\/script>`,
+                    );
+                  }
+
+                  clearScriptCssPrefixes;
+                  html = html.replace(scriptLinkRegex, (match) => {
+                    const srcMatch = match.match(/src="([^"]+)"/i);
+                    const hrefMatch = match.match(/href="([^"]+)"/i);
+                    const srcOrHref = srcMatch
+                      ? srcMatch[1]
+                      : hrefMatch
+                        ? hrefMatch[1]
+                        : null;
+                    if (typeof clearScriptCssPrefixes === "string") {
+                      if (srcOrHref?.startsWith(clearScriptCssPrefixes)) {
+                        return "";
+                      }
+                    }
+                    if (Array.isArray(clearScriptCssPrefixes)) {
+                      if (
+                        clearScriptCssPrefixes.some((prefix) =>
+                          srcOrHref?.startsWith(prefix),
+                        )
+                      ) {
+                        return "";
+                      }
+                    }
+                    if (clearScriptCssPrefixes instanceof RegExp) {
+                      return clearScriptCssPrefixes.test(match) ? "" : match;
+                    }
+                    if (typeof clearScriptCssPrefixes === "function") {
+                      return clearScriptCssPrefixes(match) ? "" : match;
+                    }
+                    return match;
+                  });
                   if (html.indexOf(fullEntry) === -1) {
                     html = html.replace(
                       /<!--\sS 公共组件 提示信息\s-->/g,
