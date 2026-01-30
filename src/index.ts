@@ -240,7 +240,6 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
                     );
                   }
 
-                  clearScriptCssPrefixes;
                   html = html.replace(scriptLinkRegex, (match) => {
                     const srcMatch = match.match(/src="([^"]+)"/i);
                     const hrefMatch = match.match(/href="([^"]+)"/i);
@@ -249,6 +248,9 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
                       : hrefMatch
                         ? hrefMatch[1]
                         : null;
+                    if (clearScriptCssPrefixes === "") {
+                      return match;
+                    }
                     if (typeof clearScriptCssPrefixes === "string") {
                       if (srcOrHref?.startsWith(clearScriptCssPrefixes)) {
                         return "";
@@ -333,6 +335,9 @@ export default function viteDevProxy(options: ProxyOptions = {}): Plugin {
   return {
     name: "vite-plugin-dev-proxy",
     config: (viteConfig: UserConfig): UserConfig => {
+      if (process.env.NODE_ENV !== "development") {
+        return {};
+      }
       const pluginProxy: Record<string, ProxyConfig> =
         createProxyConfig(options);
       const existingProxy: Record<string, any> =
