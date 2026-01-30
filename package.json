@@ -1,6 +1,6 @@
 {
 	"name": "@xysfe/vite-plugin-dev-proxy",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "A Vite plugin for development environment proxy that automatically proxies remote server requests and handles HTML responses",
 	"files": [
 		"dist"
@@ -43,6 +43,9 @@
 	],
 	"author": "aiwa",
 	"license": "MIT",
+	"publishConfig": {
+		"access": "public"
+	},
 	"devDependencies": {
 		"@types/node": "^20.11.5",
 		"typescript": "^5.3.3",
