@@ -28,7 +28,12 @@ function createProxyConfig (options) {
 
   const normalizedStaticPrefix = staticPrefix.endsWith('/') ? staticPrefix.slice(0, -1) : staticPrefix
   log('vue-cli-plugin-dev-proxy: staticPrefix', normalizedStaticPrefix)
-  const fullEntry = normalizedStaticPrefix + entry
+  let fullEntry = ''
+  if (Array.isArray(entry)) {
+    fullEntry = entry.map(e => `<script crossorigin type="module"  src="${normalizedStaticPrefix + e}"></script>`).join('\n')
+  } else {
+    fullEntry = `<script crossorigin type="module" src="${normalizedStaticPrefix + entry}"></script>`
+  }
   const scriptLinkRegex = /<(?:script[^>]*>.*?<\/script>|link[^>]*>)/g
   const assetRegex = /\.(js|mjs|ts|tsx|jsx|css|scss|sass|less|vue|json|woff2?|ttf|eot|ico|png|jpe?g|gif|svg|webp)(\?.*)?$/i
   const staticPathRegex = /^\/(static|assets|public|images|css|js)\//i
@@ -102,7 +107,7 @@ function createProxyConfig (options) {
         const isAssetRequest = assetRegex.test(requestUrl)
         const isStaticPath = staticPathRegex.test(requestUrl)
         const shouldProcessHtml = contentType.includes('text/html') && isNavigationRequest && !isAssetRequest && !isStaticPath && !isRedirect
-
+        log('1', contentType.includes('text/html'), isNavigationRequest, !isAssetRequest, !isStaticPath, !isRedirect)
         log(`[shouldProcessHtml] ${shouldProcessHtml}, requestUrl: ${requestUrl}`)
 
         if (shouldProcessHtml) {
@@ -149,15 +154,17 @@ function createProxyConfig (options) {
               }
               const decompressed = decompress()
               let html = decompressed.toString('utf-8')
+              console.log('[origin-html]', html)
+
               if (developmentAgentOccupancy) {
                 html = html.replace(
                   developmentAgentOccupancy,
-                  `<script src="${fullEntry}"></script>`
+                  fullEntry
                 )
               } else {
                 html = html.replace(
                   /<div[^>]*id=["']app["'][^>]*><\/div>/g,
-                  (match) => `${match}<script  src="${fullEntry}"></script>`
+                  (match) => `${match}${fullEntry}`
                 )
               }
 
@@ -216,10 +223,10 @@ function createProxyConfig (options) {
         const pathname = url.split('?')[0]
 
         // HTML 请求直接走本地
-        if (req.headers.accept?.includes('text/html')) {
-          log(`[Bypass HTML] ${url}`)
-          return '/index.html'
-        }
+        // if (req.headers.accept?.includes('text/html')) {
+        //   log(`[Bypass HTML] ${url}`)
+        //   return '/index.html'
+        // }
 
         const matchesLocalResource = (
           (normalizedStaticPrefix && url.startsWith(`${normalizedStaticPrefix}`)) ||
@@ -266,12 +273,3 @@ function vueCliDevProxy (options = {}) {
 }
 
 module.exports = vueCliDevProxy
-// const proxyPluginConfig = devProxyPlugin({
-//   appHost: 'beta-internal.xinhulu.com',
-//   https: true,
-//   staticPrefix: '/static/contract/',
-//   bypassPrefixes: ['/static/component', '/favicon.ico'],
-//   clearScriptCssPrefixes: ['//sslstatic.xiaoyusan.com/contract'],
-//   entry: '/js/app.js',
-//   debug: true
-// })

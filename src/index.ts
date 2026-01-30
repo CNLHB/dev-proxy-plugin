@@ -13,7 +13,7 @@ interface ProxyOptions {
   // scriptCssPrefix?: string;
   clearScriptCssPrefixes?: string | string[] | Function | RegExp;
   developmentAgentOccupancy?: string;
-  entry?: string;
+  entry?: string | string[];
   debug?: boolean;
 }
 
@@ -77,8 +77,17 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
     : staticPrefix;
   log("vite-plugin-dev-proxy: staticPrefix", normalizedStaticPrefix);
   // log("vite-plugin-dev-proxy: scriptCssPrefix", scriptCssPrefix);
-  const fullEntry = normalizedStaticPrefix + entry;
-
+  let fullEntry = "";
+  if (Array.isArray(entry)) {
+    fullEntry = entry
+      .map(
+        (e) =>
+          `<script crossorigin type="module"  src="${normalizedStaticPrefix + e}"></script>`,
+      )
+      .join("\n");
+  } else {
+    fullEntry = `<script crossorigin type="module" src="${normalizedStaticPrefix + entry}"></script>`;
+  }
   // const scriptRegex = scriptCssPrefix
   //   ? new RegExp(
   //       `<script[^>]*type="module"[^>]*crossorigin[^>]*src="${scriptCssPrefix}[^"]+"[^>]*><\\/script>`,
@@ -228,15 +237,11 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
                   // html = html.replace(linkRegex, "");
                   // <div id="app"></div>
                   if (developmentAgentOccupancy) {
-                    html = html.replace(
-                      developmentAgentOccupancy,
-                      `<script crossorigin type="module" src="${fullEntry}"></script>`,
-                    );
+                    html = html.replace(developmentAgentOccupancy, fullEntry);
                   } else {
                     html = html.replace(
                       /<div[^>]*id=["']app["'][^>]*><\/div>/g,
-                      (match) =>
-                        `${match}<script crossorigin type="module" src="${fullEntry}"><\/script>`,
+                      (match) => `${match}${fullEntry}`,
                     );
                   }
 
