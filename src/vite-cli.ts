@@ -1,139 +1,91 @@
-import zlib from "zlib";
-import { resolve } from "path";
-import fs from "fs";
 import type { Plugin, UserConfig } from "vite";
+import {
+  type ProxyOptions,
+  type IncomingMessage,
+  type ProxyResponse,
+  type ServerResponse,
+  validateOptions,
+  processOptions,
+  isRedirectResponse,
+  shouldProcessAsHtml,
+  shouldUseLocal,
+  handleRedirect,
+  handleLibModeHtml,
+  handleHtmlResponse,
+  rewriteCookies,
+} from "./core";
 
-interface ProxyOptions {
-  https?: boolean;
-  appHost?: string;
-  isLib?: boolean;
-  localIndexHtml?: string;
-  staticPrefix?: string;
-  bypassPrefixes?: string[];
-  // scriptCssPrefix?: string;
-  clearScriptCssPrefixes?: string | string[] | Function | RegExp;
-  developmentAgentOccupancy?: string;
-  entry?: string | string[];
-  debug?: boolean;
-}
-
+/**
+ * 代理配置对象
+ * @interface ProxyConfig
+ */
 interface ProxyConfig {
+  /** 代理目标地址 */
   target: string;
+  /** 是否改变origin头 */
   changeOrigin: boolean;
+  /** 是否验证SSL证书 */
   secure: boolean;
+  /** Cookie域名重写配置 */
   cookieDomainRewrite: { [key: string]: string };
+  /** 是否自行处理响应 */
   selfHandleResponse: boolean;
+  /** 配置代理实例的钩子函数 */
   configure: (proxy: any, options: any) => void;
+  /** 请求绕过函数，返回url则使用本地资源 */
   bypass?: (req: IncomingMessage) => string | null | undefined;
 }
 
-interface IncomingMessage {
-  url?: string;
-  headers: { [key: string]: string | string[] | undefined };
-}
-
-interface ProxyResponse {
-  statusCode: number;
-  headers: { [key: string]: string | string[] | undefined };
-  on: (event: string, callback: (chunk?: Buffer) => void) => void;
-  pipe: (destination: any) => void;
-}
-
-interface ServerResponse {
-  writeHead: (
-    statusCode: number,
-    headers?: { [key: string]: string | string[] | undefined },
-  ) => void;
-  end: (data?: string) => void;
-}
-
+/**
+ * 创建Vite开发服务器代理配置
+ *
+ * 此函数创建一个完整的代理配置，用于在开发环境下：
+ * - 代理远程服务器的请求
+ * - 自动注入本地入口脚本到HTML
+ * - 处理Cookie、重定向等
+ * - 支持本地资源和远程资源的混合使用
+ *
+ * @param {ProxyOptions} options - 代理配置选项
+ * @returns {Record<string, ProxyConfig>} 返回代理配置对象
+ * @throws {Error} 当 appHost 未提供或 remotePrefixes 不是数组时抛出错误
+ *
+ * @example
+ * const proxyConfig = createProxyConfig({
+ *   appHost: 'example.com',
+ *   https: true,
+ *   entry: '/src/main.js',
+ *   debug: true
+ * });
+ */
 function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
+  // 验证配置
+  validateOptions(options, "vite-plugin-dev-proxy");
+
+  // 处理配置
   const {
-    https = true,
-    appHost = "",
-    isLib = false,
-    localIndexHtml = "index.html",
-    staticPrefix = "",
-    bypassPrefixes = ["/static"],
-    // scriptCssPrefix = "",
-    developmentAgentOccupancy = "",
-    clearScriptCssPrefixes = "",
-    entry = "/src/main.js",
-    debug = false,
-  } = options;
-  if (!appHost) {
-    throw new Error("vite-plugin-dev-proxy: appHost is required");
-  }
+    https,
+    appHost,
+    localIndexHtml,
+    normalizedStaticPrefix,
+    remotePrefixes,
+    developmentAgentOccupancy,
+    clearScriptCssPrefixes,
+    fullEntry,
+    log,
+    logError,
+  } = processOptions(options, true);
 
-  if (!Array.isArray(bypassPrefixes)) {
-    throw new Error("vite-plugin-dev-proxy: bypassPrefixes must be an array");
-  }
-
-  const log: (...args: any[]) => void = debug ? console.log : () => {};
-  const logError: (...args: any[]) => void = debug ? console.error : () => {};
-
-  const normalizedStaticPrefix = staticPrefix.endsWith("/")
-    ? staticPrefix.slice(0, -1)
-    : staticPrefix;
   log("vite-plugin-dev-proxy: staticPrefix", normalizedStaticPrefix);
-  // log("vite-plugin-dev-proxy: scriptCssPrefix", scriptCssPrefix);
-  let fullEntry = "";
-  if (Array.isArray(entry)) {
-    fullEntry = entry
-      .map(
-        (e) =>
-          `<script crossorigin type="module"  src="${normalizedStaticPrefix + e}"></script>`,
-      )
-      .join("\n");
-  } else {
-    fullEntry = `<script crossorigin type="module" src="${normalizedStaticPrefix + entry}"></script>`;
-  }
-  // const scriptRegex = scriptCssPrefix
-  //   ? new RegExp(
-  //       `<script[^>]*type="module"[^>]*crossorigin[^>]*src="${scriptCssPrefix}[^"]+"[^>]*><\\/script>`,
-  //       "g",
-  //     )
-  //   : /<script[^>]*type="module"[^>]*crossorigin[^>]*src="[^"]+"[^>]*><\/script>/g;
-
-  // const linkRegex = scriptCssPrefix
-  //   ? new RegExp(
-  //       `<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="${scriptCssPrefix}[^"]+"[^>]*>`,
-  //       "g",
-  //     )
-  //   : /<link[^>]*rel="stylesheet"[^>]*crossorigin[^>]*href="[^"]+"[^>]*>/g;
-
-  const scriptLinkRegex = /<(?:script[^>]*>.*?<\/script>|link[^>]*>)/g;
-
-  const assetRegex =
-    /\.(js|mjs|ts|tsx|jsx|css|scss|sass|less|vue|json|woff2?|ttf|eot|ico|png|jpe?g|gif|svg|webp)(\?.*)?$/i;
-  const staticPathRegex = /^\/(static|assets|public|images|css|js)\//i;
-  const bypassRegex =
-    /\.(vue|js|mjs|ts|tsx|jsx|css|scss|sass|less|json|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot)$/i;
+  const protocol = https ? "https://" : "http://";
 
   return {
     "/": {
-      target: `${https ? "https" : "http"}://${appHost}`,
+      target: `${protocol}${appHost}`,
       changeOrigin: true,
       secure: false,
       cookieDomainRewrite: { "*": "localhost" },
       selfHandleResponse: true,
-      configure: (proxy, options) => {
-        const rewriteCookies = (headers: any) => {
-          const setCookie = headers["set-cookie"];
-          if (setCookie) {
-            headers["set-cookie"] = setCookie.map((cookie: any) => {
-              let rewrittenCookie = cookie
-                .replace(/;\s*secure\s*(;|$)/gi, "$1")
-                .replace(/;\s*domain\s*=[^;]+(;|$)/gi, "$1")
-                .replace(/;\s*samesite\s*=[^;]+(;|$)/gi, "$1")
-                .replace(/;+/g, ";")
-                .replace(/;\s*$/g, "");
-              log("vite-plugin-dev-proxy: rewrittenCookie", rewrittenCookie);
-              return rewrittenCookie;
-            });
-          }
-          return headers;
-        };
+      configure: (proxy, _options) => {
         proxy.on(
           "proxyRes",
           (
@@ -141,194 +93,64 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
             req: IncomingMessage,
             res: ServerResponse,
           ) => {
-            const startTime: number = Date.now();
-            const contentType: string =
+            const startTime = Date.now();
+            const contentType =
               (proxyRes.headers["content-type"] as string) || "";
-            const redirectUrl: string | undefined = proxyRes.headers
-              .location as string | undefined;
-            const requestUrl: string = req.url || "";
-            const acceptHeader: string = (req.headers.accept as string) || "";
-            const isRedirect =
-              proxyRes.statusCode >= 300 &&
-              proxyRes.statusCode < 400 &&
-              redirectUrl;
+            const requestUrl = req.url || "";
+            const acceptHeader = (req.headers.accept as string) || "";
+            const isRedirect = isRedirectResponse(proxyRes);
 
+            // 处理重定向
             if (isRedirect) {
-              const host: string | undefined = req.headers.host as
-                | string
-                | undefined;
-              const regex: RegExp = new RegExp(appHost, "gi");
-              let location: string = redirectUrl.replace(regex, host || "");
-              location = location.replace(
-                /https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/gi,
-                "http://$1$2",
-              );
-              const headers: { [key: string]: string | string[] | undefined } =
-                rewriteCookies({ ...proxyRes.headers });
-              headers.location = location;
-              res.writeHead(proxyRes.statusCode, headers);
-              res.end();
-              log(
-                `Redirect handled: ${redirectUrl} -> ${location} (${Date.now() - startTime}ms)`,
-              );
+              handleRedirect(proxyRes, req, res, appHost, log, startTime);
               return;
             }
 
-            const isNavigationRequest = acceptHeader.includes("text/html");
-            const isAssetRequest = assetRegex.test(requestUrl);
-            const isStaticPath = staticPathRegex.test(requestUrl);
-            const shouldProcessHtml =
-              contentType.includes("text/html") &&
-              isNavigationRequest &&
-              !isAssetRequest &&
-              !isStaticPath &&
-              !isRedirect;
+            // 判断是否需要处理HTML
+            const shouldProcessHtml = shouldProcessAsHtml(
+              contentType,
+              acceptHeader,
+              requestUrl,
+              isRedirect,
+            );
 
             if (shouldProcessHtml) {
-              if (isLib) {
-                try {
-                  const indexHtml = fs.readFileSync(
-                    resolve(__dirname, localIndexHtml),
-                    "utf-8",
-                  );
-                  res.writeHead(200, {
-                    "Content-Type": "text/html; charset=utf-8",
-                  });
-                  res.end(indexHtml);
-                  log(
-                    `Local HTML served: ${localIndexHtml}） (${Date.now() - startTime}ms)`,
-                  );
-                } catch (err) {
-                  logError("Failed to read local HTML:", err);
-                  res.writeHead(500);
-                  res.end("Failed to read local HTML");
-                }
+              // 本地模式：返回本地HTML
+              if (localIndexHtml) {
+                handleLibModeHtml(
+                  localIndexHtml,
+                  res,
+                  log,
+                  logError,
+                  startTime,
+                );
                 return;
               }
 
-              const encoding: string | undefined = proxyRes.headers[
-                "content-encoding"
-              ] as string | undefined;
-              const chunks: Buffer[] = [];
-              proxyRes.on(
-                "data",
-                (chunk: Buffer<ArrayBufferLike> | undefined) => {
-                  if (chunk) {
-                    chunks.push(chunk);
-                  }
-                },
-              );
-              proxyRes.on("end", () => {
-                try {
-                  let buffer: Buffer = Buffer.concat(chunks);
-                  const decompress = (): Buffer => {
-                    if (encoding === "gzip") {
-                      return zlib.gunzipSync(buffer);
-                    } else if (encoding === "deflate") {
-                      return zlib.inflateSync(buffer);
-                    } else if (encoding === "br") {
-                      return zlib.brotliDecompressSync(buffer);
-                    }
-                    return buffer;
-                  };
-                  const decompressed: Buffer = decompress();
-                  let html: string = decompressed.toString("utf-8");
-                  // html = html.replace(scriptRegex, "");
-                  // html = html.replace(linkRegex, "");
-                  // <div id="app"></div>
-                  if (developmentAgentOccupancy) {
-                    html = html.replace(developmentAgentOccupancy, fullEntry);
-                  } else {
-                    html = html.replace(
-                      /<div[^>]*id=["']app["'][^>]*><\/div>/g,
-                      (match) => `${match}${fullEntry}`,
-                    );
-                  }
-
-                  html = html.replace(scriptLinkRegex, (match) => {
-                    const srcMatch = match.match(/src="([^"]+)"/i);
-                    const hrefMatch = match.match(/href="([^"]+)"/i);
-                    const srcOrHref = srcMatch
-                      ? srcMatch[1]
-                      : hrefMatch
-                        ? hrefMatch[1]
-                        : null;
-                    if (clearScriptCssPrefixes === "") {
-                      return match;
-                    }
-                    if (typeof clearScriptCssPrefixes === "string") {
-                      if (srcOrHref?.startsWith(clearScriptCssPrefixes)) {
-                        return "";
-                      }
-                    }
-                    if (Array.isArray(clearScriptCssPrefixes)) {
-                      if (
-                        clearScriptCssPrefixes.some((prefix) =>
-                          srcOrHref?.startsWith(prefix),
-                        )
-                      ) {
-                        return "";
-                      }
-                    }
-                    if (clearScriptCssPrefixes instanceof RegExp) {
-                      return clearScriptCssPrefixes.test(match) ? "" : match;
-                    }
-                    if (typeof clearScriptCssPrefixes === "function") {
-                      return clearScriptCssPrefixes(match) ? "" : match;
-                    }
-                    return match;
-                  });
-                  if (html.indexOf(fullEntry) === -1) {
-                    html = html.replace(
-                      /<!--\sS 公共组件 提示信息\s-->/g,
-                      `<script crossorigin type="module" src="${fullEntry}"></script>`,
-                    );
-                  }
-                  const headers: {
-                    [key: string]: string | string[] | undefined;
-                  } = rewriteCookies({ ...proxyRes.headers });
-                  headers["content-type"] = "text/html; charset=utf-8";
-                  delete headers["content-encoding"];
-                  delete headers["content-length"];
-                  res.writeHead(200, headers);
-                  res.end(html);
-                  log(
-                    `HTML processed: ${requestUrl} (${Date.now() - startTime}ms)`,
-                  );
-                } catch (err) {
-                  logError("Decompress error:", err);
-                  logError("Request URL:", requestUrl);
-                  logError("Response headers:", proxyRes.headers);
-                  res.writeHead(500);
-                  res.end("Decompress error");
-                }
+              // 标准模式：处理远程HTML
+              handleHtmlResponse(proxyRes, req, res, {
+                fullEntry,
+                developmentAgentOccupancy,
+                clearScriptCssPrefixes,
+                log,
+                logError,
+                startTime,
               });
               return;
             }
 
-            const headers: { [key: string]: string | string[] | undefined } =
-              rewriteCookies({ ...proxyRes.headers });
+            // 其他资源：直接代理
+            const headers = rewriteCookies({ ...proxyRes.headers }, log);
             res.writeHead(proxyRes.statusCode, headers);
             proxyRes.pipe(res);
-            log(`Proxy request: ${requestUrl} (${Date.now() - startTime}ms)`);
+            log(`[Proxy request] ${requestUrl} (${Date.now() - startTime}ms)`);
           },
         );
       },
       bypass: (req: IncomingMessage) => {
-        const url: string = req.url || "";
-        const pathname: string = url.split("?")[0];
-        if (
-          ((normalizedStaticPrefix &&
-            url.startsWith(`${normalizedStaticPrefix}`)) ||
-            url.startsWith("/@") ||
-            url.startsWith("/src") ||
-            url.startsWith("/node_modules") ||
-            url.includes(".hot-update.") ||
-            url === "/" ||
-            bypassRegex.test(pathname)) &&
-          !bypassPrefixes.some((prefix) => url.startsWith(prefix))
-        ) {
-          log(`Bypass proxy: ${url}`);
+        const url = req.url || "";
+        if (shouldUseLocal(url, normalizedStaticPrefix, remotePrefixes)) {
+          log(`shouldUseLocal: ${url}`);
           return url;
         }
       },
@@ -336,6 +158,39 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
   };
 }
 
+/**
+ * Vite开发代理插件
+ *
+ * 用于在开发环境下代理远程服务器，同时支持本地模块热更新。
+ * 主要特性：
+ * - 自动代理远程服务器的HTML、API等请求
+ * - 自动注入本地入口脚本到远程HTML
+ * - 支持清除远程HTML中的脚本和样式标签
+ * - 处理Cookie、重定向等，确保本地开发体验
+ * - 支持多入口配置
+ * - 支持库模式，使用本地HTML文件
+ *
+ * @param {ProxyOptions} options - 插件配置选项
+ * @returns {Plugin} Vite插件对象
+ *
+ * @example
+ * // vite.config.js
+ * import viteDevProxy from 'vite-plugin-dev-proxy';
+ *
+ * export default {
+ *   plugins: [
+ *     viteDevProxy({
+ *       appHost: 'example.com',
+ *       https: true,
+ *       entry: '/src/main.js',
+ *       staticPrefix: '',
+ *       remotePrefixes: ['/static'],
+ *       clearScriptCssPrefixes: '/static',
+ *       debug: true
+ *     })
+ *   ]
+ * }
+ */
 export default function viteDevProxy(options: ProxyOptions = {}): Plugin {
   return {
     name: "vite-plugin-dev-proxy",
@@ -343,11 +198,10 @@ export default function viteDevProxy(options: ProxyOptions = {}): Plugin {
       if (process.env.NODE_ENV !== "development") {
         return {};
       }
-      const pluginProxy: Record<string, ProxyConfig> =
-        createProxyConfig(options);
-      const existingProxy: Record<string, any> =
+      const pluginProxy = createProxyConfig(options);
+      const existingProxy =
         (viteConfig.server?.proxy as Record<string, any>) || {};
-      const mergedProxy: Record<string, ProxyConfig> = {
+      const mergedProxy = {
         ...existingProxy,
         ...pluginProxy,
       };
