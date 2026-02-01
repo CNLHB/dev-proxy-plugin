@@ -369,8 +369,8 @@ export function shouldUseLocal(
     url.startsWith("/src") ||
     url.startsWith("/node_modules") ||
     url.includes(".hot-update.") ||
-    url.startsWith("/sockjs-node") || // Vue CLI/Webpack 热更新 WebSocket
-    // url.startsWith("/ws") || // Vite/通用 WebSocket
+    url.startsWith("/sockjs-node") || // Vue CLI/Webpack 热更新 WebSocket (3.x)
+    url.startsWith("/ws") || // Vue CLI/Webpack 热更新 WebSocket (4.x+/Vite)
     url === "/" ||
     BYPASS_REGEX.test(pathname);
 

@@ -85,6 +85,7 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
 
   log("vue-cli-plugin-dev-proxy: staticPrefix", normalizedStaticPrefix);
   const protocol = https ? "https://" : "http://";
+
   return {
     "/": {
       target: `${protocol}${appHost}`,
@@ -93,6 +94,7 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
       ws: false, //5.x 版本需要设置，否则会报错 Invalid frame header，4.x 版本不需要设置
       cookieDomainRewrite: { "*": "localhost" },
       selfHandleResponse: true,
+
       onProxyReq: (
         proxyReq: any,
         req: IncomingMessage,
@@ -135,18 +137,6 @@ function createProxyConfig(options: ProxyOptions): Record<string, ProxyConfig> {
         req: IncomingMessage,
         res: ServerResponse,
       ) => {
-        const upgradeHeader = req.headers.upgrade as string;
-        const isWebSocket =
-          upgradeHeader && upgradeHeader.toLowerCase() === "websocket";
-
-        if (isWebSocket) {
-          log(`[WebSocket Response] ${req.url}`);
-          const headers = rewriteCookies({ ...proxyRes.headers }, log);
-          res.writeHead(proxyRes.statusCode, headers);
-          proxyRes.pipe(res);
-          return;
-        }
-
         const startTime = Date.now();
         const contentType = (proxyRes.headers["content-type"] as string) || "";
         const requestUrl = req.url || "";
