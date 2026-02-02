@@ -371,7 +371,7 @@ export function shouldUseLocal(
     url.includes(".hot-update.") ||
     url.startsWith("/sockjs-node") || // Vue CLI/Webpack 热更新 WebSocket (3.x)
     url.startsWith("/ws") || // Vue CLI/Webpack 热更新 WebSocket (4.x+/Vite)
-    url === "/" ||
+    // url === "/" ||  // 根路径处理,默认也走远程吧,走本地不处理,默认都读本地的html vue-cli配置的 indexPath: indexPath,
     BYPASS_REGEX.test(pathname);
 
   const isRemoteResource = matchesRemoteResource(url, remotePrefixes);

@@ -74,8 +74,7 @@ const devProxy = VueCliPluginDevProxy({
   https: true,
   staticPrefix: staticPrefix,
   clearScriptCssPrefixes: ['//sslstatic.xiaoyusan.com/contract'],
-  remotePrefixes: ['/static/component'],
-  developmentAgentOccupancy: '',
+  remotePrefixes: ['/static/component','/static/pc','/static/js'],
   // entry: dynamicEntry,
   debug: true
 })
