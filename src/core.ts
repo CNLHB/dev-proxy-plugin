@@ -481,13 +481,6 @@ export function handleHtmlResponse(
       const decompressed = decompressBuffer(buffer, encoding);
       let html = decompressed.toString("utf-8");
 
-      // 注入入口脚本
-      html = injectEntryScript(
-        html,
-        context.fullEntry,
-        context.developmentAgentOccupancy,
-      );
-
       // 清理脚本和样式标签
       html = clearScriptCssTags(
         html,
@@ -495,6 +488,12 @@ export function handleHtmlResponse(
         context.log,
       );
 
+      // 注入入口脚本
+      html = injectEntryScript(
+        html,
+        context.fullEntry,
+        context.developmentAgentOccupancy,
+      );
       // 准备响应头
       const headers = rewriteCookies({ ...proxyRes.headers }, context.log);
       headers["content-type"] = "text/html; charset=utf-8";
